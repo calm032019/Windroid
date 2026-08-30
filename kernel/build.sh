@@ -87,10 +87,14 @@ done
 grep -qx 'CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"' .config \
     || die "binder devices string wrong in final .config"
 # Nothing Microsoft enables may be lost: every =y/=m in their config must
-# survive in ours (value changes y<->m also count as drift).
+# survive in ours (value changes y<->m also count as drift). Toolchain
+# capability probes (GCC_/CC_/LD_/AS_/... options) are excluded — they are
+# re-evaluated by olddefconfig for the build machine's compiler and vary
+# with it, not with our fragment (first CI run flagged
+# GCC_ASM_GOTO_OUTPUT_WORKAROUND and GCC_PLUGINS this way).
 lost="$(comm -23 <(grep -E '^CONFIG_.*=(y|m)$' Microsoft/config-wsl | sort) \
                  <(grep -E '^CONFIG_.*=(y|m)$' .config | sort) \
-        | grep -v '^CONFIG_LOCALVERSION' || true)"
+        | grep -Ev '^CONFIG_(LOCALVERSION|GCC_|CC_|LD_|AS_|CLANG_|RUSTC_|RUST_|PAHOLE_|OBJTOOL_|TOOLS_)' || true)"
 [[ -z "$lost" ]] || die "not a strict superset of Microsoft's config — lost options:
 $lost"
 

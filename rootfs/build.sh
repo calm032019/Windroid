@@ -54,12 +54,18 @@ in_chroot() {
 }
 
 echo "==> Preparing chroot"
+# Non-recursive mounts only: an rbind of /sys drags in submounts that
+# umount -R can't always release, and a still-mounted /sys then poisons the
+# final tar (first CI run failed exactly that way).
 mount -t proc proc "$ROOT/proc"
-mount --rbind /sys "$ROOT/sys"
-mount --rbind /dev "$ROOT/dev"
+mount -t sysfs sysfs "$ROOT/sys"
+mount --bind /dev "$ROOT/dev"
+mount -t devpts devpts "$ROOT/dev/pts" 2>/dev/null || true
 cp /etc/resolv.conf "$ROOT/etc/resolv.conf"
 cleanup() {
-    umount -R "$ROOT/dev" "$ROOT/sys" "$ROOT/proc" 2>/dev/null || true
+    for m in "$ROOT/dev/pts" "$ROOT/dev" "$ROOT/sys" "$ROOT/proc"; do
+        if mountpoint -q "$m"; then umount "$m" 2>/dev/null || umount -l "$m" || true; fi
+    done
 }
 trap cleanup EXIT
 
@@ -114,10 +120,19 @@ sed -i 's/^windroid:[^:]*:/windroid:!:/' "$ROOT/etc/shadow"
 
 cleanup
 trap - EXIT
+# Refuse to pack over live mounts — a leaked mount means host files in the tar.
+if mount | grep -qF "$ROOT/"; then
+    echo "ERROR: mounts still active under $ROOT:" >&2
+    mount | grep -F "$ROOT/" >&2
+    exit 1
+fi
 
 echo "==> Packing"
 NAME="windroid-rootfs-$FLAVOUR-$BUILD_ID"
-tar --numeric-owner -C "$ROOT" -c . | gzip --best > "$OUT_DIR/$NAME.tar.gz"
+# proc/sys/dev/run must exist but ship empty (kernel/WSL populate them).
+tar --numeric-owner -C "$ROOT" \
+    --exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' --exclude='./run/*' \
+    -c . | gzip --best > "$OUT_DIR/$NAME.tar.gz"
 cp "$OUT_DIR/$NAME.tar.gz" "$OUT_DIR/$NAME.wsl"
 cp "$WORK/preseed-manifest.json" "$OUT_DIR/$NAME.preseed.json"
 cat > "$OUT_DIR/$NAME.build.json" <<EOF
