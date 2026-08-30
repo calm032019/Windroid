@@ -1,0 +1,105 @@
+name: release
+
+# Phase 1.3: build kernel + rootfs, assemble the version manifest that pins
+# every artifact (Risk R3), and attach everything to a draft GitHub release.
+# Public artifacts are VANILLA-only (ADR-004).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.1.0)"
+        required: true
+        type: string
+      kernel_tag:
+        description: "microsoft/WSL2-Linux-Kernel tag to build"
+        required: true
+        type: string
+      channel:
+        description: "Release channel"
+        required: true
+        type: choice
+        options: [dev, beta, stable]
+        default: dev
+
+permissions:
+  contents: write
+
+jobs:
+  kernel:
+    uses: ./.github/workflows/kernel.yml
+    with:
+      tag: ${{ inputs.kernel_tag }}
+
+  rootfs:
+    uses: ./.github/workflows/rootfs.yml
+
+  assemble:
+    needs: [kernel, rootfs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: kernel-${{ inputs.kernel_tag }}
+          path: dist/kernel
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rootfs-vanilla
+          path: dist/rootfs
+
+      - name: Assemble pinned manifest
+        run: |
+          python3 - <<'EOF'
+          import glob, hashlib, json, os
+
+          def sha256(p):
+              h = hashlib.sha256()
+              with open(p, 'rb') as f:
+                  for chunk in iter(lambda: f.read(1 << 20), b''):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          tag = "${{ inputs.kernel_tag }}"
+          bz = f"dist/kernel/bzImage-windroid-{tag}"
+          rootfs_tar = glob.glob("dist/rootfs/windroid-rootfs-vanilla-*.tar.gz")[0]
+          build_info = json.load(open(glob.glob("dist/rootfs/*.build.json")[0]))
+          preseed = json.load(open(glob.glob("dist/rootfs/*.preseed.json")[0]))
+
+          manifest = json.load(open("manifest/versions.json"))
+          manifest["manifest_version"] = "${{ inputs.version }}"
+          manifest["channel"] = "${{ inputs.channel }}"
+          manifest["released"] = __import__("datetime").date.today().isoformat()
+          manifest["kernel"].update({
+              "wsl_kernel_tag": tag,
+              "artifact": os.path.basename(bz),
+              "sha256": sha256(bz),
+          })
+          manifest["rootfs"].update({
+              "build_id": build_info["build_id"],
+              "base": build_info["base"],
+          })
+          manifest["rootfs"]["flavours"]["vanilla"].update({
+              "artifact": os.path.basename(rootfs_tar),
+              "sha256": sha256(rootfs_tar),
+          })
+          manifest["waydroid"].update({
+              "version": build_info["waydroid_version"],
+              "system_image_sha256": preseed["images"]["system.img"]["sha256"],
+              "vendor_image_sha256": preseed["images"]["vendor.img"]["sha256"],
+          })
+          json.dump(manifest, open("dist/versions.json", "w"), indent=2)
+          print(json.dumps(manifest, indent=2))
+          EOF
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --draft \
+            --title "Windroid v${{ inputs.version }} (${{ inputs.channel }})" \
+            --notes "Pinned manifest attached as versions.json. Vanilla artifacts only — GApps is built user-side by install.ps1 -Gapps (licensing)." \
+            dist/versions.json dist/kernel/* dist/rootfs/*
