@@ -99,7 +99,7 @@ this file at the start of each phase — versions drift (agreement #2).
 - **Install (Ubuntu/Debian):**
   ```bash
   sudo apt install curl ca-certificates -y
-  curl -s https://repo.waydro.id | sudo bash        # append `-s <distro>` if detection fails
+  curl -s https://repo.waydro.id | sudo bash        # explicit codename: `| sudo bash -s -- <codename>`
   sudo apt update && sudo apt install waydroid -y
   ```
   Debian 14+/Ubuntu 26.10+ have waydroid in official repos; Debian 13 via

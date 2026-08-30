@@ -68,9 +68,11 @@ in_chroot "apt-get update"
 in_chroot "apt-get install -y --no-install-recommends \
     systemd systemd-sysv dbus sudo curl ca-certificates gnupg \
     kmod iproute2 python3"
-# Official Waydroid repo setup (UPSTREAM-FACTS §5); pass the release
+# Official Waydroid repo setup; the script takes the codename as a
+# POSITIONAL arg ($1) — the '-s' in the docs is bash's own stdin flag
+# (verified from the script source; UPSTREAM-FACTS §5). Pass the release
 # explicitly — inside a chroot the detection can't be trusted.
-in_chroot "curl -s https://repo.waydro.id | bash -s -- -s $BASE_RELEASE"
+in_chroot "curl -s https://repo.waydro.id | bash -s -- $BASE_RELEASE"
 in_chroot "apt-get update && apt-get install -y waydroid weston"
 WAYDROID_VERSION="$(in_chroot "dpkg-query -W -f '\${Version}' waydroid")"
 

@@ -68,7 +68,7 @@ cd WSL2-Linux-Kernel
   --set-val CONFIG_ANDROID_BINDER_IPC y \
   --set-val CONFIG_ANDROID_BINDERFS y \
   --set-str CONFIG_ANDROID_BINDER_DEVICES "binder,hwbinder,vndbinder"
-yes '' | make olddefconfig KCONFIG_CONFIG=Microsoft/config-wsl
+make olddefconfig KCONFIG_CONFIG=Microsoft/config-wsl   # non-interactive; no `yes` pipe (SIGPIPEs under pipefail)
 make -j$(nproc) KCONFIG_CONFIG=Microsoft/config-wsl
 make INSTALL_MOD_PATH="$PWD/modules" modules_install
 sudo ./Microsoft/scripts/gen_modules_vhdx.sh "$PWD/modules" $(make -s kernelrelease) modules.vhdx
@@ -102,7 +102,7 @@ zgrep -i -e android -e memfd /proc/config.gz
 
 ```bash
 sudo apt install -y curl ca-certificates
-curl -s https://repo.waydro.id | sudo bash     # add `-s <codename>` if detection fails
+curl -s https://repo.waydro.id | sudo bash     # explicit codename: `| sudo bash -s -- <codename>` (positional arg)
 sudo apt update && sudo apt install -y waydroid
 sudo waydroid --details-to-stdout init         # VANILLA is the default
 ```

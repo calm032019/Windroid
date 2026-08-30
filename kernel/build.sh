@@ -76,7 +76,9 @@ while IFS= read -r line; do
     [[ "$line" =~ ^CONFIG_([A-Z0-9_]+)=\"(.*)\"$ ]] && ./scripts/config --set-str "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
 done < <(grep -E '^CONFIG_' "$FRAGMENT")
 ./scripts/config --set-str LOCALVERSION "-microsoft-standard-WSL2${LOCALVERSION_SUFFIX}"
-yes '' | make olddefconfig
+# olddefconfig is non-interactive by design; piping `yes ''` into it (the
+# prior-art habit for oldconfig) dies of SIGPIPE under pipefail.
+make olddefconfig
 
 echo "==> Verifying fragment took effect (strict-superset check, R1)"
 for opt in CONFIG_ANDROID_BINDER_IPC=y CONFIG_ANDROID_BINDERFS=y; do
