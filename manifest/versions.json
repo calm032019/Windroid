@@ -27,14 +27,16 @@
     }
   },
   "waydroid": {
-    "version": null,
-    "android_version": null,
+    "version": "1.6.3 (snapshot 2026-08-30; release CI pins the built deb version)",
+    "android_version": "13 (LineageOS 20, current OTA channel as of 2026-08-30)",
     "system_image_sha256": null,
-    "vendor_image_sha256": null
+    "vendor_image_sha256": null,
+    "note": "sha256s filled by rootfs CI from the preseed manifest"
   },
   "waydroid_script": {
-    "repo": "TBD — upstream or our pin/fork per maintenance check",
-    "commit": null
+    "repo": "https://github.com/casualsnek/waydroid_script",
+    "commit": "d5289cf",
+    "note": "Upstream dormant since 2026-01 (zero releases; issue #282 asks if abandoned) — pinned per Risk R3; fork if it breaks. Known doc trap: README says 'main.py google', real subcommand is 'certified'."
   },
   "installer": {
     "min_windows_build": null,

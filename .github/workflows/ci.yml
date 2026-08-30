@@ -1,0 +1,51 @@
+name: ci
+
+# Static checks on every push/PR: shell syntax + shellcheck, PowerShell
+# parse, the .wslconfig merge/revert unit test, JSON/YAML validity.
+# (Real end-to-end testing needs a Windows 11 machine — see the test matrix
+# in docs/PLAN.md; that stays manual until Phase 3.)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax + shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          mapfile -t scripts < <(git ls-files '*.sh' 'rootfs/files/usr/local/bin/*' 'rootfs/files/usr/local/sbin/*')
+          for f in "${scripts[@]}"; do
+            head -c 100 "$f" | grep -q '^#!.*bash' || continue
+            bash -n "$f"
+          done
+          shellcheck -S warning "${scripts[@]}"
+
+      - name: Python compile + preseed dry parse
+        run: |
+          python3 -m py_compile rootfs/preseed-images.py
+          python3 -c "import json; json.load(open('manifest/versions.json')); json.load(open('manifest/versions.schema.json'))"
+
+      - name: PowerShell parse
+        shell: pwsh
+        run: |
+          $bad = $false
+          foreach ($f in Get-ChildItem -Recurse -Filter *.ps1) {
+            $t = $null; $e = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e) | Out-Null
+            if ($e) { $bad = $true; $e | ForEach-Object { Write-Host "$($f.FullName):$($_.Extent.StartLineNumber): $($_.Message)" } }
+          }
+          if ($bad) { exit 1 }
+
+      - name: .wslconfig merge/revert unit test
+        shell: pwsh
+        run: installer/tests/test-wslconfig-merge.ps1
+
+      - name: Workflow YAML validity
+        run: |
+          python3 -c "import yaml,glob; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"
