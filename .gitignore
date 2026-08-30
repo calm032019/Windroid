@@ -1,0 +1,24 @@
+# Build outputs — artifacts are released via CI, never committed
+out/
+build/
+*.tar
+*.tar.gz
+*.tar.xz
+*.wsl
+bzImage
+*.vhdx
+
+# Kernel build tree (cloned by kernel/build.sh)
+kernel/WSL2-Linux-Kernel/
+
+# Rootfs build workspace
+rootfs/work/
+
+# Android images are never committed (size + GApps licensing, ADR-004)
+*.img
+system.img
+vendor.img
+
+# Local scratch
+*.log
+.DS_Store

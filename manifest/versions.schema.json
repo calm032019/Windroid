@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Windroid version manifest",
+  "description": "One manifest pins every artifact in a release: kernel build, rootfs build, Waydroid version, image checksums. Every shipped artifact must trace to exactly one manifest entry (plan §Phase 1.3, Risk R3).",
+  "type": "object",
+  "required": ["manifest_version", "channel", "kernel", "rootfs", "waydroid"],
+  "properties": {
+    "manifest_version": { "type": "string", "description": "SemVer of this release" },
+    "released": { "type": ["string", "null"], "format": "date" },
+    "channel": { "enum": ["dev", "beta", "stable"] },
+    "kernel": {
+      "type": "object",
+      "required": ["wsl_kernel_tag", "artifact", "sha256"],
+      "properties": {
+        "wsl_kernel_tag": { "type": "string", "description": "microsoft/WSL2-Linux-Kernel tag this bzImage was built from" },
+        "artifact": { "type": "string" },
+        "sha256": { "type": ["string", "null"] },
+        "config_fragment": { "type": "string" }
+      }
+    },
+    "rootfs": {
+      "type": "object",
+      "required": ["build_id", "base", "flavours"],
+      "properties": {
+        "build_id": { "type": ["string", "null"] },
+        "base": { "type": "string" },
+        "flavours": {
+          "type": "object",
+          "properties": {
+            "vanilla": { "$ref": "#/$defs/flavour" },
+            "gapps": { "$ref": "#/$defs/flavour" }
+          }
+        }
+      }
+    },
+    "waydroid": {
+      "type": "object",
+      "properties": {
+        "version": { "type": ["string", "null"] },
+        "android_version": { "type": ["string", "null"] },
+        "system_image_sha256": { "type": ["string", "null"] },
+        "vendor_image_sha256": { "type": ["string", "null"] }
+      }
+    },
+    "waydroid_script": {
+      "type": "object",
+      "properties": {
+        "repo": { "type": "string" },
+        "commit": { "type": ["string", "null"] }
+      }
+    },
+    "installer": {
+      "type": "object",
+      "properties": {
+        "min_windows_build": { "type": ["integer", "null"] },
+        "min_wsl_version": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "flavour": {
+      "type": "object",
+      "properties": {
+        "artifact": { "type": ["string", "null"] },
+        "sha256": { "type": ["string", "null"] },
+        "public": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
