@@ -31,6 +31,16 @@ jobs:
             *) echo "tag must look like linux-msft-wsl-X.Y.Z.N"; exit 1 ;;
           esac
 
+      - name: Free runner disk space
+        # A full kernel build + module staging overflowed the standard
+        # runner's free space (failed at modules_install with ENOSPC).
+        # Drop the preinstalled toolchains we don't use (~20 GB).
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/local/share/powershell
+          df -h /
+
       - name: Install build deps
         run: |
           sudo apt-get update

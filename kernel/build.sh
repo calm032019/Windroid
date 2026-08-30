@@ -100,7 +100,9 @@ $lost"
 
 echo "==> Building"
 make -j"$(nproc)" bzImage modules
-make INSTALL_MOD_PATH="$PWD/modules-staging" modules_install
+# INSTALL_MOD_STRIP=1: unstripped .ko debug info is multi-GB and overflowed
+# the CI runner's disk; prior art strips modules too (UPSTREAM-FACTS §6).
+make INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH="$PWD/modules-staging" modules_install
 KREL="$(make -s kernelrelease)"
 
 echo "==> Packing modules vhdx (upstream helper)"
