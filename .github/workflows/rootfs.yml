@@ -1,0 +1,43 @@
+name: rootfs
+
+# Builds the PUBLIC vanilla rootfs artifact (plan Phase 1.2). The gapps
+# flavour is never built in CI — ADR-004 (licensing): it is produced on the
+# user's machine by install.ps1 -Gapps via first-boot download.
+
+on:
+  workflow_dispatch: {}
+  workflow_call: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build vanilla rootfs
+        run: sudo rootfs/build.sh --flavour vanilla --out "$PWD/out"
+
+      - name: Sanity-check archive contents
+        run: |
+          t="$(ls out/windroid-rootfs-vanilla-*.tar.gz)"
+          for path in ./etc/wsl.conf ./etc/wsl-distribution.conf \
+                      ./etc/waydroid-extra/images/system.img \
+                      ./etc/waydroid-extra/images/vendor.img \
+                      ./usr/local/bin/windroid-firstboot; do
+            tar -tzf "$t" "$path" >/dev/null || { echo "missing $path"; exit 1; }
+          done
+          # .wsl format rules: no resolv.conf in the archive
+          if tar -tzf "$t" ./etc/resolv.conf >/dev/null 2>&1; then
+            echo "resolv.conf must not be in the archive"; exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-vanilla
+          path: |
+            out/*.tar.gz
+            out/*.wsl
+            out/*.json
+            out/*.SHA256SUMS
+          if-no-files-found: error

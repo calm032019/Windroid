@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Root-side plumbing for the Windroid session, invoked via sudo -n by
+# windroid-session (the only command the windroid user may run as root —
+# see /etc/sudoers.d/windroid).
+#   windroid-prep up    — shared_memory tmpfs, net modules, container start
+#   windroid-prep down  — container stop
+set -euo pipefail
+
+case "${1:-}" in
+    up)
+        # Normally mounted by /etc/wsl.conf [boot] command; re-assert in
+        # case WSLg raced it (ddcash black-window fix). Idempotent.
+        if ! mountpoint -q /mnt/shared_memory; then
+            mkdir -p /mnt/shared_memory
+            mount -t tmpfs tmpfs /mnt/shared_memory
+        fi
+        # One module per modprobe call — extra args are treated as module
+        # parameters, not more modules (ddcash quirk).
+        for m in bridge iptable_filter iptable_nat iptable_mangle ip_tables xt_MASQUERADE xt_CHECKSUM; do
+            modprobe "$m" 2>/dev/null || true
+        done
+        systemctl start waydroid-container.service
+        ;;
+    down)
+        systemctl stop waydroid-container.service
+        ;;
+    share)
+        # Windows->Android Downloads sharing, official mechanism:
+        # mount --bind <src> ~/.local/share/waydroid/data/media/0/Download
+        # (docs.waydro.id/faq/setting-up-a-shared-folder). Runs after the
+        # session is up so Android's media dir exists.
+        # shellcheck source=/dev/null
+        source /etc/windroid/windroid.conf
+        [[ -n "${WINDOWS_DOWNLOADS:-}" && -d "$WINDOWS_DOWNLOADS" ]] || exit 0
+        user_home="$(getent passwd windroid | cut -d: -f6)"
+        target="$user_home/.local/share/waydroid/data/media/0/Download"
+        [[ -d "$target" ]] || exit 0   # media dir not materialized yet
+        mountpoint -q "$target" || mount --bind "$WINDOWS_DOWNLOADS" "$target"
+        ;;
+    *)
+        echo "usage: windroid-prep up|down" >&2
+        exit 2
+        ;;
+esac

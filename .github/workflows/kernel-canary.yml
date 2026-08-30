@@ -1,0 +1,54 @@
+name: kernel-canary
+
+# Risk R3 mitigation: watch microsoft/WSL2-Linux-Kernel for new tags and
+# open an issue + kick a build when one appears, so upstream drift is
+# noticed the week it happens, not when a user hits it.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly, Monday 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tags: ${{ steps.diff.outputs.new_tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Diff upstream tags against known list
+        id: diff
+        run: |
+          git ls-remote --tags https://github.com/microsoft/WSL2-Linux-Kernel.git 'linux-msft-wsl-*' \
+            | sed -E 's#.*refs/tags/##; s/\^\{\}$//' | sort -uV > upstream-tags.txt
+          touch kernel/known-tags.txt
+          comm -23 upstream-tags.txt <(sort -uV kernel/known-tags.txt) > new-tags.txt
+          echo "new_tags=$(paste -sd' ' new-tags.txt)" >> "$GITHUB_OUTPUT"
+          cat new-tags.txt
+
+      - name: Open tracking issue for new tags
+        if: steps.diff.outputs.new_tags != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAGS: ${{ steps.diff.outputs.new_tags }}
+        run: |
+          gh issue create \
+            --title "Upstream WSL kernel tag(s): $NEW_TAGS" \
+            --body "$(printf 'New microsoft/WSL2-Linux-Kernel tag(s) detected by the canary: %s\n\nActions:\n- [ ] Run the kernel workflow for each tag\n- [ ] Smoke-test the artifact on a WSL machine\n- [ ] Append the tag(s) to kernel/known-tags.txt (PR)\n- [ ] Update manifest/versions.json if this becomes the pinned release kernel\n' "$NEW_TAGS")" \
+            --label upstream-drift || true
+
+      - name: Trigger builds for new tags
+        if: steps.diff.outputs.new_tags != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAGS: ${{ steps.diff.outputs.new_tags }}
+        run: |
+          for t in $NEW_TAGS; do
+            gh workflow run kernel.yml -f tag="$t" || true
+          done

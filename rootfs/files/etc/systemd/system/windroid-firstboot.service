@@ -1,0 +1,14 @@
+[Unit]
+Description=Windroid first-boot initialization (waydroid init from preseeded images)
+ConditionPathExists=!/var/lib/windroid/.initialized
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/windroid-firstboot
+RemainAfterExit=yes
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

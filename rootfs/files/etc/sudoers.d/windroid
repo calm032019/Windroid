@@ -1,0 +1,4 @@
+# Minimal passwordless surface for the windroid session user: exactly one
+# root helper (mount tmpfs, modprobe net modules, container start/stop).
+# Installed 0440 by rootfs/build.sh.
+windroid ALL=(root) NOPASSWD: /usr/local/sbin/windroid-prep up, /usr/local/sbin/windroid-prep down, /usr/local/sbin/windroid-prep share, /usr/bin/systemctl start windroid-desktop-sync.service

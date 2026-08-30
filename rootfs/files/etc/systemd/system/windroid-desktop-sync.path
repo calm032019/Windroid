@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch Waydroid per-app .desktop entries for Start Menu sync
+
+[Path]
+# Waydroid's session user_manager writes waydroid.<pkg>.desktop here on app
+# install/remove; WSLg does not scan this dir, so mirror on change.
+PathModified=/home/windroid/.local/share/applications
+MakeDirectory=yes
+
+[Install]
+WantedBy=multi-user.target

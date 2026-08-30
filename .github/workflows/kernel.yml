@@ -1,0 +1,49 @@
+name: kernel
+
+# Builds a binder-enabled WSL2 kernel for a given upstream tag.
+# Phase 1.1 of docs/PLAN.md: input = WSL kernel tag; output = bzImage +
+# modules vhdx + config as a build artifact (attached to a release by the
+# release workflow once one exists).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "microsoft/WSL2-Linux-Kernel tag (e.g. linux-msft-wsl-6.6.123.2)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tag format
+        run: |
+          case "${{ inputs.tag }}" in
+            linux-msft-wsl-*) ;;
+            *) echo "tag must look like linux-msft-wsl-X.Y.Z.N"; exit 1 ;;
+          esac
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential flex bison dwarves libssl-dev libelf-dev \
+            cpio qemu-utils bc kmod rsync python3
+
+      - name: Build kernel
+        run: kernel/build.sh "${{ inputs.tag }}" "$PWD/out"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ inputs.tag }}
+          path: out/
+          if-no-files-found: error

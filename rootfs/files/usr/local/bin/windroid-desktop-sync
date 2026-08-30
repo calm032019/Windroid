@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Start Menu glue (plan Phase 2.3, mandatory per docs/UPSTREAM-FACTS.md §4):
+# Waydroid writes per-app .desktop files to ~/.local/share/applications/
+# (pattern waydroid.<pkg>.desktop), but WSLg's app-list scanner only reads
+# /usr/share/applications, /usr/local/share/applications and the flatpak
+# exports dir — XDG_DATA_DIRS support is an upstream TODO.
+#
+# This syncs the user's waydroid.*.desktop entries into
+# /usr/local/share/applications, rewriting Exec= to windroid-app so a Start
+# Menu launch boots the container/session first (spike Q3). Removes synced
+# entries whose source vanished (app uninstalled). Run as root (systemd
+# path unit on the user's applications dir, plus after session start).
+set -euo pipefail
+
+USER_NAME="${WINDROID_USER:-windroid}"
+SRC_DIR="$(getent passwd "$USER_NAME" | cut -d: -f6)/.local/share/applications"
+DST_DIR="/usr/local/share/applications"
+MARK="X-Windroid-Synced=true"
+
+mkdir -p "$DST_DIR"
+shopt -s nullglob
+
+declare -A wanted=()
+for src in "$SRC_DIR"/waydroid.*.desktop; do
+    base="$(basename "$src")"
+    pkg="${base#waydroid.}"; pkg="${pkg%.desktop}"
+    wanted["$base"]=1
+    dst="$DST_DIR/$base"
+    # Rewrite Exec to the boot-first launcher; keep Name/Icon as Waydroid
+    # wrote them. Icon= in the user's home is readable by WSLg's scanner
+    # (runs in the user distro), so leave the path alone.
+    tmp="$(mktemp)"
+    sed -E "s|^Exec=.*$|Exec=/usr/local/bin/windroid-app $pkg|" "$src" > "$tmp"
+    grep -q "^$MARK$" "$tmp" || echo "$MARK" >> "$tmp"
+    if ! cmp -s "$tmp" "$dst" 2>/dev/null; then
+        install -m 0644 "$tmp" "$dst"
+        echo "synced $base"
+    fi
+    rm -f "$tmp"
+done
+
+# Drop stale synced entries (only ones we marked — never touch other apps').
+for dst in "$DST_DIR"/waydroid.*.desktop; do
+    base="$(basename "$dst")"
+    if [[ -z "${wanted[$base]:-}" ]] && grep -q "^$MARK$" "$dst"; then
+        rm -f "$dst"
+        echo "removed stale $base"
+    fi
+done

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Windroid first boot (root, oneshot via windroid-firstboot.service).
+# Runs on the binder-enabled kernel, so `waydroid init` can succeed here —
+# it cannot at image-build time (docs/UPSTREAM-FACTS.md §5). Idempotent:
+# stamps /var/lib/windroid/.initialized on success.
+set -euo pipefail
+
+STAMP_DIR=/var/lib/windroid
+STAMP="$STAMP_DIR/.initialized"
+CONF=/etc/windroid/windroid.conf
+LOG=/var/log/windroid-firstboot.log
+
+exec > >(tee -a "$LOG") 2>&1
+[[ -e "$STAMP" ]] && { echo "already initialized"; exit 0; }
+mkdir -p "$STAMP_DIR"
+# shellcheck source=/dev/null
+source "$CONF"
+
+echo "== windroid-firstboot $(date -Is) kernel=$(uname -r)"
+
+# 1. Binder sanity — fail loudly and early if the custom kernel isn't active.
+if ! zgrep -q '^CONFIG_ANDROID_BINDER_IPC=y' /proc/config.gz 2>/dev/null; then
+    echo "FATAL: kernel has no binder support — is the Windroid kernel set in .wslconfig?"
+    exit 1
+fi
+
+# 2. Rendering override BEFORE init: the [properties] section of
+# waydroid.cfg is merged into waydroid_base.prop whenever init/upgrade
+# regenerates it — the supported override channel, unlike editing
+# waydroid_base.prop directly (UPSTREAM-FACTS §5). waydroid.cfg may not
+# exist yet; init preserves an existing file's sections.
+if [[ "${FORCE_SOFTWARE_RENDERING:-false}" == "true" ]]; then
+    mkdir -p /var/lib/waydroid
+    if [[ ! -f /var/lib/waydroid/waydroid.cfg ]] || ! grep -q '^\[properties\]' /var/lib/waydroid/waydroid.cfg; then
+        printf '\n[properties]\n' >> /var/lib/waydroid/waydroid.cfg
+    fi
+    for kv in 'ro.hardware.gralloc=default' 'ro.hardware.egl=swiftshader'; do
+        grep -qxF "$kv" /var/lib/waydroid/waydroid.cfg || \
+            sed -i "/^\[properties\]/a $kv" /var/lib/waydroid/waydroid.cfg
+    done
+fi
+
+# 3. Init. VANILLA path uses the preseeded images in
+# /etc/waydroid-extra/images (init checks that dir first and skips all
+# downloads). GAPPS must NOT see the preseeded vanilla images — the
+# preinstalled check wins over -s — so park them and download GAPPS here,
+# on the user's machine only (ADR-004).
+if [[ "${GAPPS:-false}" == "true" ]]; then
+    if [[ -d /etc/waydroid-extra/images ]]; then
+        echo "GAPPS requested: setting aside preseeded VANILLA images"
+        mv /etc/waydroid-extra/images "/etc/waydroid-extra/images.vanilla-preseed"
+    fi
+    waydroid --details-to-stdout init -s GAPPS
+else
+    waydroid --details-to-stdout init
+fi
+
+# 4. Multi-window integration (spike Q1) via the same [properties] channel;
+# persist.waydroid.* props are honored from the base prop file.
+if [[ "${MULTI_WINDOWS:-true}" == "true" ]]; then
+    grep -q '^\[properties\]' /var/lib/waydroid/waydroid.cfg || printf '\n[properties]\n' >> /var/lib/waydroid/waydroid.cfg
+    grep -qxF 'persist.waydroid.multi_windows=true' /var/lib/waydroid/waydroid.cfg || \
+        sed -i '/^\[properties\]/a persist.waydroid.multi_windows=true' /var/lib/waydroid/waydroid.cfg
+    # Regenerate waydroid_base.prop from cfg now that [properties] is final.
+    waydroid upgrade --offline
+fi
+
+systemctl enable waydroid-container.service
+
+touch "$STAMP"
+echo "== windroid-firstboot done"

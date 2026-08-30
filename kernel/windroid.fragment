@@ -1,0 +1,22 @@
+# Windroid kernel config fragment — applied on top of Microsoft's own
+# config-wsl (arch/x86/configs/config-wsl; Microsoft/config-wsl is a symlink
+# to it). Risk R1: this kernel is global to every WSL2 distro on the
+# machine, so the config must stay a strict superset of Microsoft's —
+# additions only, never removals.
+#
+# Option names verified against drivers/android/Kconfig on both
+# linux-msft-wsl-6.6.y and linux-msft-wsl-6.18.y (docs/UPSTREAM-FACTS.md §1).
+# Built-in (=y), not modules: Waydroid probes binder before any modules
+# could be loaded from a kernelModules vhdx, and built-in avoids the
+# modprobe ordering problem entirely.
+CONFIG_ANDROID_BINDER_IPC=y
+CONFIG_ANDROID_BINDERFS=y
+CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"
+# Off: the Rust rewrite and test harness are not needed and not in
+# Microsoft's config (ddcash sets the same).
+# CONFIG_ANDROID_BINDER_IPC_RUST is not set
+# CONFIG_ANDROID_BINDER_IPC_SELFTEST is not set
+#
+# NOTE: no ashmem options — ashmem does not exist in 6.6+ kernels; Waydroid
+# uses memfd (sys.use_memfd=true) when /dev/ashmem is absent. Do not add
+# ashmem patches (plan Phase 0.3).

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Windroid session control (run as the desktop user, NOT root).
+#   windroid-session start|stop|status|ensure
+#
+# Start order and quirks are prior-art-proven (docs/UPSTREAM-FACTS.md §6):
+# modprobe one module per call, container first (root, via systemd),
+# then the user session; poll the session log for readiness.
+set -euo pipefail
+
+CONF=/etc/windroid/windroid.conf
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/windroid"
+SESSION_LOG="$LOG_DIR/session.log"
+WESTON_LOG="$LOG_DIR/nested-weston.log"
+READY_TIMEOUT=90
+# shellcheck source=/dev/null
+source "$CONF"
+mkdir -p "$LOG_DIR"
+
+ensure_host_plumbing() {
+    # All root-side work (shared_memory tmpfs, net modules, container
+    # start) lives in one sudoers-whitelisted helper.
+    sudo -n /usr/local/sbin/windroid-prep up
+}
+
+session_running() {
+    waydroid status 2>/dev/null | grep -q 'Session:[[:space:]]*RUNNING'
+}
+
+start() {
+    if session_running; then echo "session already RUNNING"; return 0; fi
+    ensure_host_plumbing
+
+    if [[ "${NESTED_WESTON:-false}" == "true" ]]; then
+        # Prior-art fallback: nest a Weston so Waydroid never talks to
+        # WSLg's RDP compositor directly (stuck 1x1 buffer bug).
+        if ! pgrep -f 'weston --backend=wayland-backend' >/dev/null; then
+            WAYLAND_DISPLAY=wayland-0 setsid nohup weston \
+                --backend=wayland-backend.so --width=1280 --height=800 \
+                > "$WESTON_LOG" 2>&1 < /dev/null &
+            sleep 2
+        fi
+        export WAYLAND_DISPLAY=wayland-1
+    fi
+
+    : > "$SESSION_LOG"
+    PYTHONUNBUFFERED=1 setsid nohup waydroid session start \
+        > "$SESSION_LOG" 2>&1 < /dev/null &
+
+    for _ in $(seq "$READY_TIMEOUT"); do
+        if grep -q 'is ready' "$SESSION_LOG"; then
+            echo "session ready"
+            # Windows Downloads share + Start Menu sync (both no-ops when
+            # unconfigured / nothing changed).
+            sudo -n /usr/local/sbin/windroid-prep share || true
+            sudo -n systemctl start windroid-desktop-sync.service 2>/dev/null || true
+            return 0
+        fi
+        sleep 1
+    done
+    echo "ERROR: session not ready after ${READY_TIMEOUT}s — tail of $SESSION_LOG:" >&2
+    tail -n 20 "$SESSION_LOG" >&2
+    return 1
+}
+
+stop() {
+    waydroid session stop 2>/dev/null || true
+    pkill -f 'weston --backend=wayland-backend' 2>/dev/null || true
+    sudo -n /usr/local/sbin/windroid-prep down 2>/dev/null || true
+    echo "stopped"
+}
+
+case "${1:-}" in
+    start)  start ;;
+    ensure) session_running || start ;;
+    stop)   stop ;;
+    status) waydroid status ;;
+    *) echo "usage: windroid-session start|stop|status|ensure" >&2; exit 2 ;;
+esac

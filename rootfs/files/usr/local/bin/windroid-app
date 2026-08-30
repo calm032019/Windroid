@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Launch an Android app, booting the stack first if needed. This is the
+# Exec= target of the Start Menu .desktop entries (spike Q3: launching from
+# the Start Menu must work with WSL cold / no session running).
+#   windroid-app <android-package-name>
+set -euo pipefail
+PKG="${1:?usage: windroid-app <package>}"
+windroid-session ensure
+exec waydroid app launch "$PKG"

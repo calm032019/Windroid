@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync Waydroid app .desktop entries into WSLg-visible location
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/windroid-desktop-sync
