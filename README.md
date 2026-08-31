@@ -121,3 +121,20 @@ automation depends on it.
 Milestones: M0 spike proven → M1 CI artifacts boot on a clean VM → M2
 one-command install/uninstall clean → M3 perf budgets met across the test
 matrix → M4 polish → v1.
+
+Build the distributables yourself (needs a Linux WSL distro for the image
+build, and Inno Setup for the wizard):
+
+```bash
+sudo rootfs/build.sh --flavour vanilla --out dist   # prebaked distro image
+kernel/build.sh --from-uname                        # binder-enabled kernel
+```
+
+then `scripts/make-manifest.py`, `scripts/make-dist.ps1` (zip) and
+`scripts/make-setup.ps1` (wizard exe).
+
+## Licence
+
+MIT for the Windroid glue — see [`LICENSE`](LICENSE). Bundled upstream
+components keep their own licences, listed in [`NOTICE.md`](NOTICE.md).
+Google Apps images are never redistributed here.

@@ -19,26 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers the Windroid glue in this repository (kernel config
-fragment, rootfs build scripts, installer, tray, CLI, docs).
-
-Windroid BUNDLES and BUILDS UPON third-party software under its own terms —
-none of it is relicensed here:
-
-- Linux kernel (microsoft/WSL2-Linux-Kernel) — GPL-2.0
-- Waydroid — GPL-3.0; the Android system images it fetches are
-  LineageOS/AOSP (Apache-2.0 plus the licenses of their components)
-- Weston / WSLg — MIT
-- Ubuntu base rootfs — per-package licenses (mostly GPL/MIT/BSD)
-- Preinstalled apps, fetched from F-Droid at image-build time and shipped
-  unmodified: Aurora Store (GPL-3.0), Fennec/Firefox for Android
-  (MPL-2.0), Material Files (GPL-3.0)
-- Inno Setup (installer wizard toolchain) — modified-BSD-style, see
-  jrsoftware.org
-
-Google Apps (GApps) images are NOT redistributed by this project under any
-circumstances; the `-Gapps` installer flag fetches them on the user's own
-machine (see docs/DECISIONS.md ADR-004).
