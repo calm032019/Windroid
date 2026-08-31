@@ -81,13 +81,20 @@ Full rationale and the phase-by-phase plan: [`docs/PLAN.md`](docs/PLAN.md).
 Decisions and rejected alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 What deliberately doesn't work: [`docs/known-limits.md`](docs/known-limits.md).
 
-> **Status: Phase 0 spike PROVEN (2026-08-30).** Android 13 (LineageOS 20)
-> runs in per-app resizable windows on a real Windows 11 machine: custom
-> binder kernel ✅, multi-window direct to WSLg ✅, Start Menu entries ✅,
-> Windows→Android Downloads sharing ✅, cold start 17.1 s ✅. See
-> [`docs/SPIKE.md`](docs/SPIKE.md) for the findings log. CI artifacts and
-> the one-command installer (Phases 1–2) are written but not yet exercised
-> end-to-end — nothing is installable by end users yet.
+> **Status: v0.1.0 — first working release, tested on one machine.**
+> Android 13 (LineageOS 20) runs in per-app resizable windows on real
+> Windows 11 hardware: custom binder kernel ✅, multi-window direct to
+> WSLg ✅, Start Menu entries ✅, Windows→Android Downloads sharing ✅,
+> preinstalled app suite ✅, cold start 17.1 s / warm launch 2.5 s /
+> install 63 s ✅, uninstall returns the machine to its prior state ✅
+> (Docker Desktop coexists throughout).
+>
+> Caveats worth knowing before you install: the full test matrix (Intel +
+> AMD, 8 GB machines, iGPU-only, several Windows 11 builds) has **not** been
+> run — this is proven on one i9/NVIDIA laptop. Graphics are software-
+> rendered. The installers are unsigned, so SmartScreen will warn. Every
+> fix and gotcha behind the build is logged in
+> [`docs/SPIKE.md`](docs/SPIKE.md) (findings F1–F17).
 
 ## Repo layout
 
