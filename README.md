@@ -24,7 +24,7 @@
 > the beast is not seen in its stall; for a cunning glass named *WSLg*
 > taketh each application by its own likeness and casteth it forth upon
 > thy desktop as **its own window**, which thou mayest drag, stretch,
-> minish and close as any Christian program. Their names are writ into thy
+> minish and close as any program. Their names are writ into thy
 > Start Menu, all gathered in one coffer marked *Windroid*, and whatsoever
 > new app thou dost install shall place itself there also, unbidden.
 >
