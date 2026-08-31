@@ -1,21 +1,23 @@
 {
   "$schema": "./versions.schema.json",
-  "manifest_version": "0.1.0-dev",
-  "released": null,
+  "manifest_version": "0.1.0",
+  "released": "2026-08-30",
   "channel": "dev",
   "kernel": {
-    "wsl_kernel_tag": "TBD — set by kernel CI from microsoft/WSL2-Linux-Kernel release tag",
-    "artifact": "bzImage-windroid-<tag>",
-    "sha256": null,
+    "wsl_kernel_tag": "linux-msft-wsl-6.18.33.1",
+    "artifact": "bzImage-windroid-linux-msft-wsl-6.18.33.1",
+    "sha256": "6750cddd9fc99468d4bfa2c225f04c8cec4f2d10d39264152bb0b87ed3910238",
+    "modules_artifact": "modules-windroid-linux-msft-wsl-6.18.33.1.vhdx",
+    "modules_sha256": "d83121cacd73ed09370d8c6fcbc28519d79490b615fe05cdbb516e0f5f08394e",
     "config_fragment": "kernel/windroid.fragment"
   },
   "rootfs": {
-    "build_id": null,
-    "base": "TBD — distro/version chosen in Phase 1",
+    "build_id": "202608301829",
+    "base": "ubuntu-base noble (ubuntu-base-24.04.4-base-amd64.tar.gz)",
     "flavours": {
       "vanilla": {
-        "artifact": "windroid-rootfs-vanilla-<build_id>.tar.gz",
-        "sha256": null,
+        "artifact": "windroid-rootfs-vanilla-202608301829.tar.gz",
+        "sha256": "9a1b219d3e8cd411a17e38cbcdfa914c404b7e191598a49a36b6bd719a7154a5",
         "public": true
       },
       "gapps": {
@@ -27,19 +29,38 @@
     }
   },
   "waydroid": {
-    "version": "1.6.3 (snapshot 2026-08-30; release CI pins the built deb version)",
-    "android_version": "13 (LineageOS 20, current OTA channel as of 2026-08-30)",
-    "system_image_sha256": null,
-    "vendor_image_sha256": null,
-    "note": "sha256s filled by rootfs CI from the preseed manifest"
+    "version": "1.6.2",
+    "android_version": "13 (LineageOS 20)",
+    "system_image_sha256": "d2809f66124f5d99e1165466ebd8aa1dacfb82829937942d81134a0862117103",
+    "vendor_image_sha256": "5edafb92678c5abec7c8403c6873ce1de583009a57a6cb6de44d99f9b3f5c070"
+  },
+  "preinstalled_apps": {
+    "com.aurora.store": {
+      "apkName": "com.aurora.store_76.apk",
+      "versionCode": 76,
+      "versionName": "4.8.4",
+      "sha256": "fd9c75d90d0f4a7c132b9b4a5a2cf1992a45e03b8d8ff988b7dcfbc0db2c4d11"
+    },
+    "org.mozilla.fennec_fdroid": {
+      "apkName": "org.mozilla.fennec_fdroid_1540010.apk",
+      "versionCode": 1540010,
+      "versionName": "154.0.0",
+      "sha256": "4fd685d8bd9ef77329a2da2639013ed8cae39fd700eff6edeb9c4dae69a689f2"
+    },
+    "me.zhanghai.android.files": {
+      "apkName": "me.zhanghai.android.files_39.apk",
+      "versionCode": 39,
+      "versionName": "1.7.4",
+      "sha256": "ebc5138b6f713f0f73b5467a1a8a4ac3ccfcb2e82135372665b6811a8947641f"
+    }
   },
   "waydroid_script": {
     "repo": "https://github.com/casualsnek/waydroid_script",
     "commit": "d5289cf",
-    "note": "Upstream dormant since 2026-01 (zero releases; issue #282 asks if abandoned) — pinned per Risk R3; fork if it breaks. Known doc trap: README says 'main.py google', real subcommand is 'certified'."
+    "note": "Pinned per Risk R3. Doc trap: real subcommand is certified, not google."
   },
   "installer": {
-    "min_windows_build": null,
-    "min_wsl_version": null
+    "min_windows_build": 22000,
+    "min_wsl_version": "2.4.4"
   }
 }

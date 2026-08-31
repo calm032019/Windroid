@@ -277,16 +277,59 @@ selection, networking toggles; shared-user-folder file handling ("Windows"
 location inside Android's Files app; APK install from Files). Latest LTS
 release 2026-01-04.
 
-## Open UNVERIFIED items (must close in Phase 0)
+## UNVERIFIED items — status after Phase 0 (spike 2026-08-30, see SPIKE.md)
 
-1. `persist.waydroid.multi_windows` behaviour against WSLg's compositor
-   (direct, no nested Weston) — works? stuck-buffer bug? per-window RAIL?
-2. `vmIdleTimeout=-1` — harvested from ddcash, not in Microsoft docs.
-3. Whether stock (auto-detected) rendering works on WSL2 without the
-   SwiftShader props (sourhub226 removed them) — and whether Waydroid's GPU
-   autodetect misfires on `/dev/dxg`.
-4. Exact current microsoft/WSL release number (agent snapshot was
-   ambiguous; ≥2.4.4 features are what we rely on).
-5. Whether WSLg audio in/out and clipboard work with Waydroid apps
-   (mechanism implied, never spelled out in prior art).
-6. ddcash's `suspend_action` cfg key is his patch, not upstream.
+1. **CLOSED — works.** `persist.waydroid.multi_windows=true` direct against
+   WSLg gives true per-app RAIL windows; 3 apps verified simultaneously; no
+   stuck-1×1 buffer on WSLg 1.0.73.2. Nested Weston not needed.
+2. **NOT NEEDED so far.** `vmIdleTimeout=-1` was never set; sessions
+   survived normally. Revisit only if the VM teardown bites.
+3. **CLOSED — auto-detect is correct.** init itself picks
+   `gralloc=default` + `egl=swiftshader` on WSL2 (no /dev/dri); it does NOT
+   misfire on `/dev/dxg`. The forced-props override is redundant there.
+4. **CLOSED.** WSL 2.7.8.0 on the spike machine (WSLg 1.0.73.2, stock
+   kernel 6.18.33.1-1).
+5. **PARTIAL.** Audio plumbing verified (AudioFlinger MIXER thread up;
+   PulseServer protocol 35 answers). Audible out / mic / clipboard need an
+   unlocked interactive desktop.
+6. **CLOSED — ddcash's patch still required.** `suspend_action` is a real
+   waydroid.cfg key in 1.6.x (`freeze` default) but upstream `suspend()`
+   only recognizes `"stop"`; anything else — including `none` — freezes
+   the container (`tools/services/hardware_manager.py` L21-26). Android's
+   own screen-off timer triggers it, windows vanish, nothing unfreezes.
+   Fix: rootfs/patch-waydroid.py adds the `none` branch (assert-guarded),
+   firstboot sets `suspend_action = none`.
+
+## New facts from Phase 0 (spike 2026-08-30)
+
+- **`waydroid init` never early-returns**: `is_initialized()` (cfg file
+  AND rootfs dir) only triggers a log line; init proceeds into
+  `setup_config()` regardless (1.6.2 `actions/initializer.py` L125). The
+  skip-if-cfg-exists behaviour is ddcash's installer, not upstream.
+- **init writes an empty `[properties]` section** — appending another one
+  breaks configparser (`DuplicateSectionError`). Grep before appending.
+- **`waydroid app install/launch` must run as the session user** — root
+  sees "session is stopped".
+- **Downloads sharing on WSL needs two deviations from the docs.waydro.id
+  mechanism** (plain `mount --bind` yields an empty dir inside Android):
+  (1) WSL roots are `private` propagation — `mount --make-rshared /` first
+  (native systemd hosts are rshared, which is why the documented way works
+  there); (2) drvfs (9p, `trans=fd`) binds can't be read from the container
+  namespace — interpose `bindfs -o allow_other --force-user=1023
+  --force-group=1023 --create-for-user=1000 --create-for-group=1000`.
+  Verified: `/storage/emulated/0/Download` lists the Windows files.
+- **WSLg Start Menu pipeline**: app list is enumerated at RDP connect, not
+  live — new `.desktop` entries surface after the next session restart.
+  WSLg converts `Icon=` PNGs to `.ico` under
+  `%LOCALAPPDATA%\Temp\WSLDVCPlugin\<distro>\` and writes `.lnk` files to
+  `%APPDATA%\...\Start Menu\Programs\<distro>\` targeting
+  `C:\Program Files\WSL\wslg.exe -d <distro> --cd ~ -- <Exec>`.
+- **Waydroid marks stock (preinstalled) apps `NoDisplay=true`** — only
+  user-installed apps get Start Menu entries. Desired.
+- **`[WARN:COPY MODE]`** = WSLg shared-memory fast path off; content still
+  renders via the copy path. Fresh `wsl --shutdown` + boot (tmpfs in
+  [boot] command) restores the fast path; in-place session restarts can
+  regress to copy mode. Perf item, not correctness.
+- **RAIL window titles come from the Android app's label** (Jelly ⇒
+  "Browser") — don't match windows by package name.
+- Spike timings (i9-13980HX/NVMe): cold start 17.1 s, warm launch 2.5 s.

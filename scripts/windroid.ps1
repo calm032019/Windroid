@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   windroid CLI (plan Phase 2.4).
     windroid install <apk>   sideload an APK
@@ -11,7 +11,7 @@ param(
     [Parameter(Position = 0)][ValidateSet("install", "start", "stop", "status", "adb", "shell", "help")]
     [string]$Command = "help",
     [Parameter(Position = 1)][string]$Arg,
-    [string]$DistroName = "windroid"
+    [string]$DistroName = "Windroid"
 )
 $ErrorActionPreference = "Stop"
 

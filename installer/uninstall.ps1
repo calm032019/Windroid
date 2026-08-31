@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Windroid uninstaller. A clean machine afterwards is an exit criterion
   (plan Phase 2.6): unregister the distro, revert ONLY our .wslconfig
@@ -7,7 +7,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$DistroName = "windroid",
+    [string]$DistroName = "Windroid",
     [string]$InstallRoot = "$env:LOCALAPPDATA\Windroid",
     [switch]$KeepUserData   # export Android /data before unregistering
 )
@@ -22,17 +22,21 @@ if ($registered) {
     if ($KeepUserData) {
         $backup = Join-Path $env:USERPROFILE "windroid-data-backup-$(Get-Date -Format yyyyMMddHHmmss).tar.gz"
         Write-Host "==> Exporting Android user data to $backup"
-        wsl -d $DistroName -u root -e bash -c "tar -czf - -C /var/lib/waydroid data" > $backup
+        # Android user data lives under the session user's home
+        # (~/.local/share/waydroid/data — UPSTREAM-FACTS §5), and tar must
+        # write the archive itself: PowerShell's > re-encodes byte streams.
+        $wslBackup = ((wsl -d $DistroName -e wslpath -a "$backup") -replace "`0", "").Trim()
+        $bashCmd = 'home=$(getent passwd windroid | cut -d: -f6); if [ -d "$home/.local/share/waydroid/data" ]; then tar -czf ' + "'$wslBackup'" + ' -C "$home/.local/share/waydroid" data; else echo "no Android user data found - nothing exported"; fi'
+        wsl -d $DistroName -u root -e bash -c $bashCmd
     }
     Write-Host "==> Unregistering distro '$DistroName'"
     wsl --unregister $DistroName
 }
 
-Write-Host "==> Reverting our .wslconfig keys (and only ours)" -ForegroundColor Cyan
-if ((Test-Path $StateFile) -and (Test-Path $WslConfig)) {
-    $state = Get-Content $StateFile -Raw | ConvertFrom-Json
-    $lines = @(Get-Content $WslConfig)
-    foreach ($chg in $state.wslconfigChanges) {
+function Revert-IniFile([string]$path, $changes) {
+    if (-not ($changes -and (Test-Path $path))) { return }
+    $lines = @(Get-Content $path)
+    foreach ($chg in $changes) {
         $inSection = $false
         $lines = @($lines | ForEach-Object {
             if ($_ -match '^\s*\[(.+)\]\s*$') { $inSection = ($Matches[1] -eq $chg.section); $_ }
@@ -57,22 +61,33 @@ if ((Test-Path $StateFile) -and (Test-Path $WslConfig)) {
         } else { $cleaned.Add($lines[$i]) }
     }
     if (($cleaned | Where-Object { $_.Trim() }).Count -eq 0) {
-        Remove-Item $WslConfig                       # nothing left but our config: remove the file
+        Remove-Item $path                            # nothing left but our config: remove the file
     } else {
-        Set-Content -Path $WslConfig -Value $cleaned
+        Set-Content -Path $path -Value $cleaned
     }
+}
+
+Write-Host "==> Reverting our .wslconfig/.wslgconfig keys (and only ours)" -ForegroundColor Cyan
+if (Test-Path $StateFile) {
+    $state = Get-Content $StateFile -Raw | ConvertFrom-Json
+    Revert-IniFile $WslConfig $state.wslconfigChanges
+    Revert-IniFile (Join-Path $env:USERPROFILE ".wslgconfig") $state.wslgconfigChanges
 } elseif (Test-Path $WslConfig) {
-    Write-Warning "No install state found — .wslconfig left untouched. Remove Windroid's kernel/kernelModules/memory/autoMemoryReclaim/sparseVhd lines manually if present (backups: $WslConfig.windroid-backup-*)."
+    Write-Warning "No install state found — .wslconfig/.wslgconfig left untouched. Remove Windroid's kernel/kernelModules/memory/autoMemoryReclaim lines (and the [system-distro-env] WSL2_DEFAULT_APP_* lines) manually if present (backups: $WslConfig.windroid-backup-*)."
 }
 
 Write-Host "==> Removing Windows integration" -ForegroundColor Cyan
-Remove-Item -Recurse -Force (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Windroid") -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$DistroName") -ErrorAction SilentlyContinue
 $binDir = Join-Path $InstallRoot "bin"
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -like "*$binDir*") {
     [Environment]::SetEnvironmentVariable("Path", (($userPath -split ';' | Where-Object { $_ -and $_ -ne $binDir }) -join ';'), "User")
 }
-Get-Process | Where-Object { $_.ProcessName -eq 'powershell' -and $_.MainWindowTitle -eq 'Windroid Tray' } | Stop-Process -ErrorAction SilentlyContinue
+# Kill the tray by command line — it runs -WindowStyle Hidden, so its host
+# window has no matchable title (zip-test finding).
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object { $_.CommandLine -like "*windroid-tray.ps1*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 Write-Host "==> Removing $InstallRoot (kernel, distro vhdx, logs, state)" -ForegroundColor Cyan
 Remove-Item -Recurse -Force $InstallRoot -ErrorAction SilentlyContinue

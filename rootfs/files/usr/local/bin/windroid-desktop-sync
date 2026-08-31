@@ -16,6 +16,10 @@ USER_NAME="${WINDROID_USER:-windroid}"
 SRC_DIR="$(getent passwd "$USER_NAME" | cut -d: -f6)/.local/share/applications"
 DST_DIR="/usr/local/share/applications"
 MARK="X-Windroid-Synced=true"
+# Stock packages to surface in the Start Menu despite Waydroid marking
+# them NoDisplay=true (spike F8): Android Settings belongs in the
+# Windroid folder like WSA's settings did.
+EXPOSE_STOCK=" com.android.settings "
 
 mkdir -p "$DST_DIR"
 shopt -s nullglob
@@ -31,6 +35,9 @@ for src in "$SRC_DIR"/waydroid.*.desktop; do
     # (runs in the user distro), so leave the path alone.
     tmp="$(mktemp)"
     sed -E "s|^Exec=.*$|Exec=/usr/local/bin/windroid-app $pkg|" "$src" > "$tmp"
+    if [[ "$EXPOSE_STOCK" == *" $pkg "* ]]; then
+        sed -i '/^NoDisplay=true$/d' "$tmp"
+    fi
     grep -q "^$MARK$" "$tmp" || echo "$MARK" >> "$tmp"
     if ! cmp -s "$tmp" "$dst" 2>/dev/null; then
         install -m 0644 "$tmp" "$dst"

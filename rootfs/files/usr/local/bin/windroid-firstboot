@@ -46,11 +46,18 @@ fi
 # preinstalled check wins over -s — so park them and download GAPPS here,
 # on the user's machine only (ADR-004).
 if [[ "${GAPPS:-false}" == "true" ]]; then
-    if [[ -d /etc/waydroid-extra/images ]]; then
-        echo "GAPPS requested: setting aside preseeded VANILLA images"
-        mv /etc/waydroid-extra/images "/etc/waydroid-extra/images.vanilla-preseed"
+    preseed_type="$(cat /etc/waydroid-extra/images/.system-type 2>/dev/null || echo VANILLA)"
+    if [[ "$preseed_type" == "GAPPS" ]]; then
+        # Local gapps rootfs build: the preseeded images ARE the GAPPS
+        # images — use them directly, no re-download.
+        waydroid --details-to-stdout init
+    else
+        if [[ -d /etc/waydroid-extra/images ]]; then
+            echo "GAPPS requested: setting aside preseeded VANILLA images"
+            mv /etc/waydroid-extra/images "/etc/waydroid-extra/images.vanilla-preseed"
+        fi
+        waydroid --details-to-stdout init -s GAPPS
     fi
-    waydroid --details-to-stdout init -s GAPPS
 else
     waydroid --details-to-stdout init
 fi
@@ -64,6 +71,11 @@ if [[ "${MULTI_WINDOWS:-true}" == "true" ]]; then
     # Regenerate waydroid_base.prop from cfg now that [properties] is final.
     waydroid upgrade --offline
 fi
+
+# Never freeze the container on focus loss — on a desktop, windows spend
+# most of their life unfocused/minimized. suspend_action is an upstream
+# waydroid.cfg key as of 1.6.x (spike-verified; formerly ddcash's patch).
+sed -i 's/^suspend_action = .*/suspend_action = none/' /var/lib/waydroid/waydroid.cfg
 
 systemctl enable waydroid-container.service
 

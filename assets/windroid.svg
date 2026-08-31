@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Windroid logo: the Windows four-pane grid drawn as the Android robot.
+       Antennae + eyes from the bugdroid head, panes in Android green.
+       Master asset — assets/windroid.ico and the PNGs are generated from
+       this via scripts/make-icons.sh. -->
+  <g stroke="#3DDC84" stroke-width="13" stroke-linecap="round">
+    <line x1="86" y1="58" x2="60" y2="18"/>
+    <line x1="170" y1="58" x2="196" y2="18"/>
+  </g>
+  <g fill="#3DDC84">
+    <rect x="30" y="50" width="94" height="94" rx="16"/>
+    <rect x="132" y="50" width="94" height="94" rx="16"/>
+    <rect x="30" y="152" width="94" height="94" rx="16"/>
+    <rect x="132" y="152" width="94" height="94" rx="16"/>
+  </g>
+  <circle cx="77" cy="97" r="14" fill="#ffffff"/>
+  <circle cx="179" cy="97" r="14" fill="#ffffff"/>
+</svg>

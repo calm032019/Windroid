@@ -23,6 +23,10 @@ jobs:
           for path in ./etc/wsl.conf ./etc/wsl-distribution.conf \
                       ./etc/waydroid-extra/images/system.img \
                       ./etc/waydroid-extra/images/vendor.img \
+                      ./etc/windroid/apks/com.aurora.store.apk \
+                      ./etc/windroid/apks/org.mozilla.fennec_fdroid.apk \
+                      ./etc/windroid/apks/me.zhanghai.android.files.apk \
+                      ./usr/lib/windroid/windroid.ico \
                       ./usr/local/bin/windroid-firstboot; do
             tar -tzf "$t" "$path" >/dev/null || { echo "missing $path"; exit 1; }
           done

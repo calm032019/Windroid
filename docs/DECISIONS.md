@@ -84,3 +84,19 @@ user's machine**.
 Stage 1 is PowerShell + toast notifications. A Tauri/WinUI 3 app is only
 started after the PowerShell version has run for two weeks in real use.
 Keeps the installer dependency-free and the iteration loop fast.
+
+---
+
+## ADR-006 — Images preseed into `/etc/waydroid-extra/images`, not `/var/lib/waydroid`
+
+**Date:** 2026-08-30 · **Status:** Accepted
+
+The plan (§Phase 1.2) expected images preseeded into `/var/lib/waydroid`
+via `waydroid init` at rootfs-build time. Verified against upstream source
+(UPSTREAM-FACTS §5): `waydroid init` hard-requires binder nodes, so it
+cannot run in the build chroot — and init checks
+`preinstalled_images_paths` (`/etc/waydroid-extra/images` first) and skips
+all downloads when `system.img` + `vendor.img` exist there. So the build
+places images in `/etc/waydroid-extra/images` plus a `.system-type` marker,
+and first boot (on the binder kernel) runs the real `waydroid init`. The
+plan text is superseded on this point.

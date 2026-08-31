@@ -107,6 +107,12 @@ def main():
         record.setdefault("images", {})[img] = {
             "sha256": sha256_file(path), "bytes": os.path.getsize(path)}
 
+    # Marker so windroid-firstboot can tell what flavour was preseeded (a
+    # gapps rootfs preseeds GAPPS images that init should use directly, not
+    # park and re-download).
+    with open(os.path.join(args.dest, ".system-type"), "w") as f:
+        f.write(args.system_type + "\n")
+
     if args.manifest_out:
         with open(args.manifest_out, "w") as f:
             json.dump(record, f, indent=2)

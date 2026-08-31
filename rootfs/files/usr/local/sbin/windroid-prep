@@ -25,20 +25,33 @@ case "${1:-}" in
         systemctl stop waydroid-container.service
         ;;
     share)
-        # Windows->Android Downloads sharing, official mechanism:
-        # mount --bind <src> ~/.local/share/waydroid/data/media/0/Download
-        # (docs.waydro.id/faq/setting-up-a-shared-folder). Runs after the
+        # Windows->Android Downloads sharing. The waydroid-documented
+        # mount --bind (docs.waydro.id/faq/setting-up-a-shared-folder) does
+        # NOT work on WSL: drvfs is 9p with trans=fd, whose transport can't
+        # be reused from the container's mount namespace — reads return
+        # empty. bindfs (FUSE) routes through the kernel and works across
+        # namespaces (spike finding, 2026-08-30). uid 1023 = Android
+        # media_rw. Needs rshared root propagation (see /etc/wsl.conf) so
+        # the mount reaches Android's storage namespaces. Runs after the
         # session is up so Android's media dir exists.
         # shellcheck source=/dev/null
         source /etc/windroid/windroid.conf
+        # Installer writes the path here (raw text, quoting-proof channel);
+        # windroid.conf's WINDOWS_DOWNLOADS remains as a manual override.
+        if [[ -z "${WINDOWS_DOWNLOADS:-}" && -r /etc/windroid/downloads-path ]]; then
+            WINDOWS_DOWNLOADS="$(cat /etc/windroid/downloads-path)"
+        fi
         [[ -n "${WINDOWS_DOWNLOADS:-}" && -d "$WINDOWS_DOWNLOADS" ]] || exit 0
         user_home="$(getent passwd windroid | cut -d: -f6)"
         target="$user_home/.local/share/waydroid/data/media/0/Download"
         [[ -d "$target" ]] || exit 0   # media dir not materialized yet
-        mountpoint -q "$target" || mount --bind "$WINDOWS_DOWNLOADS" "$target"
+        mountpoint -q "$target" || bindfs -o allow_other \
+            --force-user=1023 --force-group=1023 \
+            --create-for-user=1000 --create-for-group=1000 \
+            "$WINDOWS_DOWNLOADS" "$target"
         ;;
     *)
-        echo "usage: windroid-prep up|down" >&2
+        echo "usage: windroid-prep up|down|share" >&2
         exit 2
         ;;
 esac

@@ -42,6 +42,20 @@ jobs:
           }
           if ($bad) { exit 1 }
 
+      - name: PowerShell files must carry a UTF-8 BOM
+        # Windows PowerShell 5.1 decodes BOM-less files as ANSI; an em-dash's
+        # last byte (0x94) then reads as a smart closing quote and breaks
+        # parsing at runtime (spike finding 2026-08-30). pwsh (used above)
+        # cannot catch this — it reads BOM-less files as UTF-8.
+        run: |
+          bad=0
+          while IFS= read -r f; do
+            if [ "$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')" != "efbbbf" ]; then
+              echo "missing UTF-8 BOM: $f"; bad=1
+            fi
+          done < <(git ls-files '*.ps1')
+          exit $bad
+
       - name: .wslconfig merge/revert unit test
         shell: pwsh
         run: installer/tests/test-wslconfig-merge.ps1

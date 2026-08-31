@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Windroid measurement harness (plan Phase 3 — built before any tuning).
   All PERF.md numbers come from here, never hand-timing.
@@ -20,7 +20,7 @@
 param(
     [Parameter(Position = 0)][ValidateSet("cold-start", "warm-launch", "idle-ram", "all")]
     [string]$Stage = "all",
-    [string]$DistroName = "windroid",
+    [string]$DistroName = "Windroid",
     [string]$AppPackage = "org.fdroid.fdroid",
     [string]$AppWindowTitle = "F-Droid",
     [int]$SettleMinutes = 5,

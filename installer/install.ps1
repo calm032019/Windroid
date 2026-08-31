@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Windroid installer — one command, idempotent, resumable across the
   WSL-install reboot (plan Phase 2.1).
@@ -33,7 +33,7 @@
 param(
     [switch]$Gapps,
     [string]$ArtifactSource = "https://github.com/calm032019/Windroid/releases/latest/download",
-    [string]$DistroName = "windroid",
+    [string]$DistroName = "Windroid",
     [string]$InstallRoot = "$env:LOCALAPPDATA\Windroid",
     [ValidateRange(2, 64)][int]$MemoryCapGB = 0,   # 0 = auto: min(8GB, 50% RAM)
     [switch]$Bench
@@ -53,7 +53,7 @@ function Fail($msg) { Write-Host "FAIL: $msg" -ForegroundColor Red; Add-Content 
 
 function Get-State {
     if (Test-Path $StateFile) { Get-Content $StateFile -Raw | ConvertFrom-Json }
-    else { [pscustomobject]@{ done = @(); wslconfigChanges = @() } }
+    else { [pscustomobject]@{ done = @(); wslconfigChanges = @(); wslgconfigChanges = @() } }
 }
 function Save-State($state) { $state | ConvertTo-Json -Depth 5 | Set-Content $StateFile }
 function Test-Done($state, $stage) { $state.done -contains $stage }
@@ -80,6 +80,20 @@ if (-not (Test-Done $state "preflight")) {
     $sysDrive = Get-PSDrive -Name $env:SystemDrive.TrimEnd(':')
     if ($sysDrive.Free -lt 15GB) { Fail "Need >= 15 GB free on $env:SystemDrive (found $([math]::Round($sysDrive.Free/1GB,1)) GB)." }
 
+    # Advise BEFORE touching anything: enabling WSL forces a Windows restart
+    # (the setup wizard shows this on its system-check page; this covers the
+    # console/INSTALL.cmd path).
+    $wslEnabled = $false
+    try { wsl --status *> $null; $wslEnabled = ($LASTEXITCODE -eq 0) } catch { }
+    if (-not $wslEnabled) {
+        Write-Host ""
+        Write-Host "NOTE: WSL is not enabled on this PC yet. Setup will enable it now," -ForegroundColor Yellow
+        Write-Host "but Windows will REQUIRE A RESTART partway through. After restarting," -ForegroundColor Yellow
+        Write-Host "run this installer again - it resumes exactly where it left off." -ForegroundColor Yellow
+        Write-Host "Press Ctrl+C within 10 seconds if you'd rather not continue." -ForegroundColor Yellow
+        Start-Sleep -Seconds 10
+    }
+
     # Existing distro with our name = previous/partial install; import stage handles it.
     # Mirrored networking conflicts with Waydroid's dnsmasq (ADR-003) — warn, don't touch.
     if ((Test-Path $WslConfig) -and (Select-String -Path $WslConfig -Pattern '^\s*networkingMode\s*=\s*mirrored' -Quiet)) {
@@ -104,8 +118,11 @@ if (-not (Test-Done $state "wsl")) {
     }
     wsl --update | Out-Null
     # .wsl-file features and current fixes need a reasonably fresh WSL (>= 2.4.4).
-    $ver = (wsl --version | Select-String -Pattern 'WSL[^\d]*([\d.]+)' | Select-Object -First 1).Matches.Groups[1].Value
+    # wsl.exe output is UTF-16; strip the interleaved NULs before parsing.
+    $verLine = ((wsl --version) -replace "`0", "") | Select-String -Pattern 'WSL[^\d]*([\d.]+)' | Select-Object -First 1
+    $ver = if ($verLine) { $verLine.Matches.Groups[1].Value } else { $null }
     Add-Content $LogFile "WSL version: $ver"
+    if ($ver -and ([version]$ver -lt [version]"2.4.4")) { Fail "WSL $ver is too old (need >= 2.4.4). Run 'wsl --update' and rerun." }
     Mark-Done ([ref]$state) "wsl"
 }
 
@@ -113,10 +130,12 @@ if (-not (Test-Done $state "wsl")) {
 if (-not (Test-Done $state "artifacts")) {
     Write-Step "Fetching artifacts from $ArtifactSource"
     function Get-Artifact($name, $dest) {
-        if (Test-Path (Join-Path $ArtifactSource $name)) {
-            Copy-Item (Join-Path $ArtifactSource $name) $dest -Force
-        } else {
+        # Test-Path on an https:// string throws DriveNotFoundException —
+        # branch on the source shape, not on path existence.
+        if ($ArtifactSource -match '^https?://') {
             Invoke-WebRequest -Uri "$ArtifactSource/$name" -OutFile $dest
+        } else {
+            Copy-Item (Join-Path $ArtifactSource $name) $dest -Force
         }
     }
     Get-Artifact "versions.json" (Join-Path $InstallRoot "manifest.json")
@@ -148,8 +167,12 @@ if (-not (Test-Done $state "wslconfig")) {
         $ramGB = [math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
         $MemoryCapGB = [math]::Min(8, [math]::Max(2, [math]::Floor($ramGB / 2)))
     }
-    $kernelPath  = (Join-Path $KernelDir "bzImage")  -replace '\\', '\\\\'
-    $modulesPath = (Join-Path $KernelDir "modules.vhdx") -replace '\\', '\\\\'
+    # .wslconfig wants escaped backslashes (kernel=C:\\path). In .NET regex
+    # substitution a backslash is LITERAL ($ is the only special char), so
+    # the replacement is '\\' — '\\\\' writes quadruple backslashes
+    # (zip-test finding; WSL tolerated it, but stay spec-conformant).
+    $kernelPath  = (Join-Path $KernelDir "bzImage")  -replace '\\', '\\'
+    $modulesPath = (Join-Path $KernelDir "modules.vhdx") -replace '\\', '\\'
 
     if (Test-Path $WslConfig) {
         Copy-Item $WslConfig "$WslConfig.windroid-backup-$(Get-Date -Format yyyyMMddHHmmss)"
@@ -178,18 +201,42 @@ if (-not (Test-Done $state "wslconfig")) {
         elseif (-not $set) { $out.Add("$key=$value") }
         return ,$out.ToArray()
     }
+    # No sparseVhd: WSL 2.7.x disabled sparse VHD support ("due to potential
+    # data corruption") and warns on every start if set (zip-test finding).
     foreach ($kv in @(
         @{ s = "wsl2";         k = "kernel";           v = $kernelPath },
         @{ s = "wsl2";         k = "kernelModules";    v = $modulesPath },
         @{ s = "wsl2";         k = "memory";           v = "${MemoryCapGB}GB" },
-        @{ s = "experimental"; k = "autoMemoryReclaim"; v = "gradual" },
-        @{ s = "experimental"; k = "sparseVhd";        v = "true" })) {
+        @{ s = "experimental"; k = "autoMemoryReclaim"; v = "gradual" })) {
         $script:prevValue = $null
         $lines = Set-IniKey $lines $kv.s $kv.k $kv.v
         $changes += [pscustomobject]@{ section = $kv.s; key = $kv.k; value = $kv.v; previous = $script:prevValue }
     }
     Set-Content -Path $WslConfig -Value $lines
     $state.wslconfigChanges = $changes
+
+    # .wslgconfig: make WSLg badge GUI apps with the Windroid logo instead
+    # of Tux, and use it as the fallback window icon. The paths resolve via
+    # /mnt/wslg/distro (the per-instance user-distro mount), so they only
+    # exist inside the Windroid distro's WSLg — other distros keep Tux.
+    $WslgConfig = Join-Path $env:USERPROFILE ".wslgconfig"
+    if (Test-Path $WslgConfig) {
+        Copy-Item $WslgConfig "$WslgConfig.windroid-backup-$(Get-Date -Format yyyyMMddHHmmss)"
+    }
+    $glines = if (Test-Path $WslgConfig) { @(Get-Content $WslgConfig) } else { @() }
+    $gchanges = @()
+    foreach ($kv in @(
+        @{ s = "system-distro-env"; k = "WSL2_DEFAULT_APP_ICON";         v = "/mnt/wslg/distro/usr/lib/windroid/windroid-256.png" },
+        @{ s = "system-distro-env"; k = "WSL2_DEFAULT_APP_OVERLAY_ICON"; v = "/mnt/wslg/distro/usr/lib/windroid/windroid-256.png" })) {
+        $script:prevValue = $null
+        $glines = Set-IniKey $glines $kv.s $kv.k $kv.v
+        $gchanges += [pscustomobject]@{ section = $kv.s; key = $kv.k; value = $kv.v; previous = $script:prevValue }
+    }
+    Set-Content -Path $WslgConfig -Value $glines
+    if (-not ($state.PSObject.Properties.Name -contains 'wslgconfigChanges')) {
+        $state | Add-Member -NotePropertyName wslgconfigChanges -NotePropertyValue @()
+    }
+    $state.wslgconfigChanges = $gchanges
     Save-State $state
     wsl --shutdown
     Mark-Done ([ref]$state) "wslconfig"
@@ -219,11 +266,19 @@ if (-not (Test-Done $state "configure")) {
         wsl -d $DistroName -u root -e bash -c "sed -i 's/^GAPPS=false/GAPPS=true/' /etc/windroid/windroid.conf"
     }
     # Windows -> Android Downloads sharing (plan Phase 2.5): pass the WSL
-    # view of the user's Downloads folder into the guest config.
+    # view of the user's Downloads folder into the guest. NOT via sed with
+    # an interpolated value: PowerShell's native-argv quoting mangles
+    # embedded \" and truncates the expression (zip-test finding, twice).
+    # Base64 through WSLENV needs zero quote characters end to end; the
+    # guest reads /etc/windroid/downloads-path as raw text.
     $downloads = (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path
-    $wslDownloads = (wsl -d $DistroName -e wslpath -a "$downloads").Trim()
+    $wslDownloads = ((wsl -d $DistroName -e wslpath -a "$downloads") -join '' -replace "`0", "").Trim()
     if ($wslDownloads) {
-        wsl -d $DistroName -u root -e bash -c "sed -i 's|^WINDOWS_DOWNLOADS=.*|WINDOWS_DOWNLOADS=\"$wslDownloads\"|' /etc/windroid/windroid.conf"
+        $env:WINDROID_DL_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($wslDownloads))
+        $oldWslEnv = $env:WSLENV
+        $env:WSLENV = "WINDROID_DL_B64" + $(if ($oldWslEnv) { ":" + $oldWslEnv } else { "" })
+        wsl -d $DistroName -u root -e bash -c 'echo $WINDROID_DL_B64 | base64 -d > /etc/windroid/downloads-path'
+        $env:WSLENV = $oldWslEnv
     }
     Mark-Done ([ref]$state) "configure"
 }
@@ -262,20 +317,40 @@ if (-not (Test-Done $state "integrate")) {
     $traySrc = Join-Path $PSScriptRoot "..\windows\tray\windroid-tray.ps1"
     if (Test-Path $traySrc) { Copy-Item $traySrc $BinDir -Force }
 
-    # windroid.cmd shim so `windroid` works from any shell once on PATH.
-    Set-Content -Path (Join-Path $BinDir "windroid.cmd") -Value "@powershell -NoProfile -ExecutionPolicy Bypass -File `"$BinDir\windroid.ps1`" %*"
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*$BinDir*") {
-        [Environment]::SetEnvironmentVariable("Path", "$userPath;$BinDir", "User")
+    # Only wire up what was actually copied — a release download without the
+    # repo checkout must not get a dead shim/shortcut.
+    if (Test-Path (Join-Path $BinDir "windroid.ps1")) {
+        # windroid.cmd shim so `windroid` works from any shell once on PATH.
+        Set-Content -Path (Join-Path $BinDir "windroid.cmd") -Value "@powershell -NoProfile -ExecutionPolicy Bypass -File `"$BinDir\windroid.ps1`" %*"
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$BinDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$userPath;$BinDir", "User")
+        }
+    } else {
+        Write-Warning "scripts\windroid.ps1 not found next to the installer — the 'windroid' CLI was not installed."
     }
 
-    $programs = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Windroid"
-    New-Item -ItemType Directory -Force -Path $programs | Out-Null
-    $shell = New-Object -ComObject WScript.Shell
-    $lnk = $shell.CreateShortcut((Join-Path $programs "Windroid Tray.lnk"))
-    $lnk.TargetPath = "powershell.exe"
-    $lnk.Arguments  = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$BinDir\windroid-tray.ps1`""
-    $lnk.Save()
+    # Windroid logo: used by the tray and the Start Menu shortcut. WSLg's
+    # per-app shortcuts land in the same Programs\<DistroName> folder, so
+    # everything Android lives under one "Windroid" Start Menu group.
+    $icoSrc = Join-Path $PSScriptRoot "..\assets\windroid.ico"
+    if (Test-Path $icoSrc) {
+        Copy-Item $icoSrc (Join-Path $InstallRoot "windroid.ico") -Force
+        Copy-Item $icoSrc (Join-Path $BinDir "windroid.ico") -Force   # tray badge fallback
+    }
+
+    if (Test-Path (Join-Path $BinDir "windroid-tray.ps1")) {
+        $programs = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$DistroName"
+        New-Item -ItemType Directory -Force -Path $programs | Out-Null
+        $shell = New-Object -ComObject WScript.Shell
+        $lnk = $shell.CreateShortcut((Join-Path $programs "Windroid Tray.lnk"))
+        $lnk.TargetPath = "powershell.exe"
+        $lnk.Arguments  = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$BinDir\windroid-tray.ps1`""
+        if (Test-Path (Join-Path $InstallRoot "windroid.ico")) { $lnk.IconLocation = "$(Join-Path $InstallRoot "windroid.ico"),0" }
+        $lnk.Save()
+    } else {
+        Write-Warning "windows\tray\windroid-tray.ps1 not found next to the installer — tray shortcut not created."
+    }
     Mark-Done ([ref]$state) "integrate"
 }
 

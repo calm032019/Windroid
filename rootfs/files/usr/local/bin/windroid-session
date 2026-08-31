@@ -49,6 +49,36 @@ start() {
     for _ in $(seq "$READY_TIMEOUT"); do
         if grep -q 'is ready' "$SESSION_LOG"; then
             echo "session ready"
+            # One-time install of the bundled app suite (store, browser,
+            # file manager — preseeded by rootfs/preseed-apks.py). Runs as
+            # the session user: `waydroid app ...` fails under root (spike
+            # F5). Stamped so it never reruns.
+            local apk_stamp="$LOG_DIR/.apks-installed"
+            if [[ -d /etc/windroid/apks && ! -e "$apk_stamp" ]]; then
+                local all_ok=true
+                for apk in /etc/windroid/apks/*.apk; do
+                    [[ -e "$apk" ]] || continue
+                    local pkg; pkg="$(basename "$apk" .apk)"
+                    echo "installing bundled app: $pkg"
+                    waydroid app install "$apk" || true
+                    # `app install` can return before PackageManager commits;
+                    # a session stop right after (e.g. the installer's smoke
+                    # test) aborts the biggest APK (zip-test finding). Poll
+                    # until the package is really there.
+                    local ok=false
+                    for _ in $(seq 45); do
+                        if waydroid app list 2>/dev/null | grep -q "packageName: $pkg"; then ok=true; break; fi
+                        sleep 1
+                    done
+                    if [[ "$ok" != "true" ]]; then
+                        echo "WARN: bundled app did not install: $pkg" >&2
+                        all_ok=false
+                    fi
+                done
+                # Only stamp when everything landed — a partial first run
+                # retries the missing ones next session.
+                [[ "$all_ok" == "true" ]] && touch "$apk_stamp"
+            fi
             # Windows Downloads share + Start Menu sync (both no-ops when
             # unconfigured / nothing changed).
             sudo -n /usr/local/sbin/windroid-prep share || true

@@ -1,0 +1,8 @@
+# Guest-side files run inside Linux: LF always, whatever the checkout host.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.iss text eol=crlf
+*.ico binary
+*.png binary
+*.bmp binary

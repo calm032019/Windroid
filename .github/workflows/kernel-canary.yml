@@ -28,7 +28,14 @@ jobs:
           git ls-remote --tags https://github.com/microsoft/WSL2-Linux-Kernel.git 'linux-msft-wsl-*' \
             | sed -E 's#.*refs/tags/##; s/\^\{\}$//' | sort -uV > upstream-tags.txt
           touch kernel/known-tags.txt
-          comm -23 upstream-tags.txt <(sort -uV kernel/known-tags.txt) > new-tags.txt
+          if [ ! -s kernel/known-tags.txt ]; then
+            # Bootstrap guard: an empty known list would mark every
+            # historical tag "new" and trigger dozens of hour-long kernel
+            # builds. Report only the newest tag until the list is seeded.
+            tail -n1 upstream-tags.txt > new-tags.txt
+          else
+            comm -23 upstream-tags.txt <(sort -uV kernel/known-tags.txt) > new-tags.txt
+          fi
           echo "new_tags=$(paste -sd' ' new-tags.txt)" >> "$GITHUB_OUTPUT"
           cat new-tags.txt
 

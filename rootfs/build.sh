@@ -73,7 +73,7 @@ echo "==> Installing packages"
 in_chroot "apt-get update"
 in_chroot "apt-get install -y --no-install-recommends \
     systemd systemd-sysv dbus sudo curl ca-certificates gnupg \
-    kmod iproute2 python3"
+    kmod iproute2 python3 procps gzip bindfs"
 # Official Waydroid repo setup; the script takes the codename as a
 # POSITIONAL arg ($1) — the '-s' in the docs is bash's own stdin flag
 # (verified from the script source; UPSTREAM-FACTS §5). Pass the release
@@ -81,6 +81,10 @@ in_chroot "apt-get install -y --no-install-recommends \
 in_chroot "curl -s https://repo.waydro.id | bash -s -- $BASE_RELEASE"
 in_chroot "apt-get update && apt-get install -y waydroid weston"
 WAYDROID_VERSION="$(in_chroot "dpkg-query -W -f '\${Version}' waydroid")"
+
+echo "==> Applying anti-freeze patch (suspend_action=none support)"
+cp "$SCRIPT_DIR/patch-waydroid.py" "$ROOT/tmp/patch-waydroid.py"
+in_chroot "python3 /tmp/patch-waydroid.py && rm /tmp/patch-waydroid.py"
 
 echo "==> Preseeding Android images (flavour: $FLAVOUR)"
 # waydroid init can't run here (needs binder — UPSTREAM-FACTS §5); place
@@ -93,9 +97,20 @@ python3 "$SCRIPT_DIR/preseed-images.py" \
     --system-type "$SYSTEM_TYPE" \
     --manifest-out "$WORK/preseed-manifest.json"
 
+echo "==> Preseeding bundled app suite (store/browser/file manager)"
+python3 "$SCRIPT_DIR/preseed-apks.py" \
+    --dest "$ROOT/etc/windroid/apks" \
+    --manifest-out "$WORK/apks-manifest.json"
+
 echo "==> Installing Windroid guest files"
-# files/ mirrors the target filesystem layout.
-cp -a "$SCRIPT_DIR/files/." "$ROOT/"
+# files/ mirrors the target filesystem layout. NOT cp -a: -a preserves the
+# repo checkout's ownership (the invoking user / CI runner), and sudo then
+# refuses the non-root-owned /etc/sudoers.d at runtime (zip-test finding).
+# Plain cp as root writes root:root; modes are set explicitly below.
+cp -r --preserve=mode "$SCRIPT_DIR/files/." "$ROOT/"
+chown -R 0:0 "$ROOT/etc/sudoers.d" "$ROOT/etc/windroid" "$ROOT/etc/systemd" \
+             "$ROOT/usr/local" "$ROOT/usr/lib/windroid" \
+             "$ROOT/etc/wsl.conf" "$ROOT/etc/wsl-distribution.conf"
 chmod 0755 "$ROOT/usr/local/bin/windroid-firstboot" \
            "$ROOT/usr/local/bin/windroid-session" \
            "$ROOT/usr/local/bin/windroid-app" \
@@ -108,6 +123,15 @@ chmod 0644 "$ROOT/etc/wsl-distribution.conf"
 
 echo "==> Creating default user + enabling units"
 in_chroot "id windroid >/dev/null 2>&1 || useradd -m -u 1000 -s /bin/bash -G sudo windroid"
+# Pre-create the user's XDG dirs with the RIGHT ownership: the
+# desktop-sync .path unit's MakeDirectory=yes would otherwise create
+# ~/.local/... as root at boot, and the session user can then never write
+# ~/.local/state (zip-test finding — session start died on mkdir).
+in_chroot "install -d -o windroid -g windroid \
+    /home/windroid/.local \
+    /home/windroid/.local/share \
+    /home/windroid/.local/share/applications \
+    /home/windroid/.local/state"
 in_chroot "systemctl enable windroid-firstboot.service windroid-desktop-sync.path"
 in_chroot "visudo -cf /etc/sudoers.d/windroid"
 
@@ -135,6 +159,7 @@ tar --numeric-owner -C "$ROOT" \
     -c . | gzip --best > "$OUT_DIR/$NAME.tar.gz"
 cp "$OUT_DIR/$NAME.tar.gz" "$OUT_DIR/$NAME.wsl"
 cp "$WORK/preseed-manifest.json" "$OUT_DIR/$NAME.preseed.json"
+cp "$WORK/apks-manifest.json" "$OUT_DIR/$NAME.apks.json"
 cat > "$OUT_DIR/$NAME.build.json" <<EOF
 {
   "build_id": "$BUILD_ID",

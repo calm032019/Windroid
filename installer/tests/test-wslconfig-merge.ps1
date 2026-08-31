@@ -1,4 +1,4 @@
-# Extracts Set-IniKey from install.ps1 and tests merge behavior against a
+﻿# Extracts Set-IniKey from install.ps1 and tests merge behavior against a
 # Docker-Desktop-style .wslconfig, then tests the uninstall revert logic.
 $ErrorActionPreference = "Stop"
 $src = Get-Content (Join-Path $PSScriptRoot "..\install.ps1") -Raw
