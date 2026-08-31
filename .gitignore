@@ -30,3 +30,6 @@ __pycache__/
 # Wizard bitmaps are generated from assets/windroid.svg by scripts/make-icons.sh
 # (the .ico IS committed - the rootfs build and installer need it)
 assets/wizard-*.bmp
+
+# Scratch dropbox for images/files handed over during a session
+.filedump/

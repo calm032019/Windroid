@@ -1,6 +1,10 @@
 # Windroid — Android Subsystem for Windows
 
-<p align="center"><img src="assets/windroid-256.png" width="128" alt="Windroid"></p>
+<p align="center">
+  <img src="assets/hero.jpg" alt="A marble statue of the Android robot, draped in a toga, typing at a marble laptop in a sculptor's workshop">
+</p>
+
+<p align="center"><img src="assets/windroid-256.png" width="96" alt="Windroid"></p>
 
 > ### Ye Olde Descriptioun
 >
