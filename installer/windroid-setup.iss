@@ -83,8 +83,9 @@ end;
 
 procedure ProbeSystem();
 begin
-  { wsl --status exits 0 only when WSL is installed and functional. }
-  WslPresent := RunHidden(ExpandConstant('{sys}\wsl.exe'), '--status') = 0;
+  { The 32-bit wizard sees SysWOW64 through {sys}, but wsl.exe is }
+  { only installed in native System32. Sysnative bypasses WOW64 redirection. }
+  WslPresent := RunHidden(ExpandConstant('{sysnative}\wsl.exe'), '--status') = 0;
   { HypervisorPresent = virtualization enabled + hypervisor running. }
   VirtPresent := RunHidden('powershell.exe',
     '-NoProfile -Command "exit [int](-not (Get-CimInstance Win32_ComputerSystem).HypervisorPresent)"') = 0;
